@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import http from 'http';
 import { z } from 'zod';
 import { TrelloClient } from './trello-client.js';
 import { TrelloHealthEndpoints, HealthEndpointSchemas } from './health/health-endpoints.js';
@@ -1271,9 +1273,41 @@ class TrelloServer {
     });
     await this.server.connect(transport);
   }
+
+  async runHttp() {
+    await this.trelloClient.loadConfig().catch(() => {});
+    const port = parseInt(process.env.PORT ?? '3000', 10);
+    const transports: Record<string, SSEServerTransport> = {};
+
+    const httpServer = http.createServer(async (req, res) => {
+      if (req.method === 'GET' && req.url === '/sse') {
+        const transport = new SSEServerTransport('/messages', res);
+        transports[transport.sessionId] = transport;
+        res.on('close', () => delete transports[transport.sessionId]);
+        await this.server.connect(transport);
+      } else if (req.method === 'POST' && req.url?.startsWith('/messages')) {
+        const sessionId = new URL(req.url, `http://localhost`).searchParams.get('sessionId');
+        const transport = transports[sessionId ?? ''];
+        if (transport) {
+          await transport.handlePostMessage(req, res);
+        } else {
+          res.writeHead(404);
+          res.end('Unknown session');
+        }
+      } else {
+        res.writeHead(404);
+        res.end('Not found');
+      }
+    });
+
+    httpServer.listen(port, () => {
+      console.error(`MCP SSE server listening on :${port}`);
+    });
+  }
 }
 
 const server = new TrelloServer();
-server.run().catch(() => {
+const useHttp = process.argv.includes('--http') || process.env.TRANSPORT === 'http';
+(useHttp ? server.runHttp() : server.run()).catch(() => {
   // Silently handle errors to avoid interfering with MCP protocol
 });

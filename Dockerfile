@@ -38,5 +38,7 @@ RUN bun install --production --frozen
 # They can be provided via docker run -e or docker compose environment section
 ENV NODE_ENV=production
 
+EXPOSE 3000
+
 # Run the MCP server using Bun
-CMD ["bun", "build/index.js"]
+CMD ["bun", "build/index.js", "--http"]

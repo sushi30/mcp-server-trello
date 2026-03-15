@@ -64,6 +64,7 @@
     "versionbump:patch": "bun run versionbump --patch",
     "versionbump:minor": "bun run versionbump --minor",
     "versionbump:major": "bun run versionbump --major",
+    "start:http": "bun build/index.js --http",
     "publish": "bun run build && npm publish"
   }
 }
